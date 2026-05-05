@@ -17,46 +17,45 @@ const main = (params) => {
   const slug_od = 1.265;
   const slug_height = 2.7;
   const ball_radius = 4.25;
-  const bevel_depth = 0.2;
+  const bevel_depth = 0.15;
 
   const pitchX = Math.asin(params.forward_pitch / ball_radius);
   const pitchY = Math.asin(params.lateral_pitch / ball_radius);
   const ovalRad = degToRad(params.oval_angle);
 
-  // 1. THE SLUG
+  // 1. THE SLUG (Vertical and Stationary)
   let slug = cylinder({ height: slug_height, radius: slug_od / 2, segments: 128 });
   slug = translate([0, 0, slug_height / 2], slug);
 
-  // 2. THE CUTTER (Extra-long cylinder so the 'slanted top' is 2 inches above the slug)
-  let hole = cylinder({ height: 8, radius: 0.5, segments: 64 });
-  
-  // The Bevel - we make this a very tall cone so the tilt doesn't leave a lip
-  let bevel = cylinder({ height: 1.0, radiusStart: 0.5, radiusEnd: 0.9, segments: 64 });
-  bevel = translate([0, 0, 0.4], bevel); // Lift it so the transition is at Z=0
+  // 2. THE CUTTER (Built so the top center is [0,0,0])
+  // We make the hole 5 inches long so it clears the bottom
+  let hole = cylinder({ height: 5, radius: 0.5, segments: 64 });
+  hole = translate([0, 0, -2.5], hole); // Shift so top is at Z=0
+
+  // The Bevel (anchored to the top of the hole)
+  let bevel = cylinder({ height: 0.4, radiusStart: 0.5, radiusEnd: 0.75, segments: 64 });
+  bevel = translate([0, 0, -0.1], bevel); // Sink into the top slightly
 
   let cutter = union(hole, bevel);
+  
+  // Scale and Rotate the cutter at the origin (0,0,0)
   cutter = scale([params.thumb_width, params.thumb_depth, 1], cutter);
   cutter = rotateZ(ovalRad, cutter);
   
-  // Pivot from Z=0 (the entry point)
+  // PITCH ROTATION (Happens exactly at the top center 0,0,0)
   cutter = rotateX(pitchX, cutter);
   cutter = rotateY(pitchY, cutter);
   
-  // Move it so the pivot point sits exactly at the slug's top surface
+  // MOVE CUTTER TO SLUG TOP
   cutter = translate([0, 0, slug_height], cutter);
 
-  // 3. THE FLATTENER (A massive block to shave the top 100% flat)
-  let flattener = cuboid({ size: [10, 10, 4] });
-  flattener = translate([0, 0, slug_height + 2.0], flattener);
-
-  // 4. THE NOTCH
+  // 3. THE NOTCH (Standard JoPo alignment slot)
   let notch = cuboid({ size: [0.12, 0.12, 0.4] });
-  notch = translate([0, slug_od / 2, slug_height], notch);
+  notch = translate([0, slug_od / 2, slug_height - 0.1], notch);
 
-  // 5. FINAL ASSEMBLY
-  let finalModel = subtract(slug, cutter, notch, flattener);
-
-  return finalModel;
+  // 4. FINAL SUBTRACTION
+  // We take the slug and subtract the tilted cutter and the notch slot
+  return subtract(slug, cutter, notch);
 };
 
 module.exports = { main, getParameterDefinitions };
