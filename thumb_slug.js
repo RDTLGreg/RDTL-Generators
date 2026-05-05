@@ -27,35 +27,34 @@ const main = (params) => {
   let blank = cylinder({ height: slug_height, radius: slug_od / 2, segments: 128 });
   blank = translate([0, 0, slug_height / 2], blank);
 
-  // 2. THE CUTTER ASSEMBLY (Built from the top down)
-  // The main hole - made extra long to clear the bottom
-  let hole = cylinder({ height: slug_height + 2, radius: 0.5, segments: 64 });
-  // Offset so the top of the cylinder is at Z=0
-  hole = translate([0, 0, -(slug_height + 2) / 2], hole);
+  // 2. THE CUTTER ASSEMBLY
+  // We make the hole 4 inches long to ensure it clears top and bottom easily
+  let hole = cylinder({ height: 4.0, radius: 0.5, segments: 64 });
+  hole = translate([0, 0, -2.0], hole); // Center it so the 'top' is at 0
   
-  // The Bevel - Offset so it sinks into the top of the hole
-  let bevel = cylinder({ height: fillet_depth * 2, radiusStart: 0.5, radiusEnd: 0.7, segments: 64 });
-  bevel = translate([0, 0, -fillet_depth + 0.01], bevel); // +0.01 creates a solid overlap
+  // The Bevel - Sunk into the hole slightly for a solid union
+  let bevel = cylinder({ height: 0.5, radiusStart: 0.5, radiusEnd: 0.8, segments: 64 });
+  bevel = translate([0, 0, -0.25], bevel); 
 
-  // Combine into one solid 'bit'
   let fullCutter = union(hole, bevel);
   
   // Scale for Oval and Rotate for Angle
   fullCutter = scale([params.thumb_width, params.thumb_depth, 1], fullCutter);
   fullCutter = rotateZ(ovalRad, fullCutter);
 
-  // Apply Pitch Rotation (Pivots from 0,0,0)
+  // Apply Pitch Rotation (Pivots from the exact center of the top entry)
   fullCutter = rotateX(pitchX, fullCutter);
   fullCutter = rotateY(pitchY, fullCutter);
 
-  // Move the cutter to the top of the slug
-  fullCutter = translate([0, 0, slug_height], fullCutter);
+  // MOVE TO FINAL POSITION
+  // We lift it to slug_height PLUS a tiny bit (0.05) to ensure it clears the top
+  fullCutter = translate([0, 0, slug_height + 0.05], fullCutter);
 
   // 3. THE NOTCH
   let notch = cuboid({ size: [0.12, 0.12, 0.4] });
   notch = translate([0, slug_od / 2, slug_height], notch);
 
-  // 4. THE FINAL CUT
+  // 4. THE FINAL SUBTRACTION
   return subtract(blank, fullCutter, notch);
 };
 
