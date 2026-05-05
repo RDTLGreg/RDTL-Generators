@@ -1,7 +1,8 @@
-const { cylinder, cuboid } = require('@jscad/modeling').primitives;
+const { cylinder, cuboid, ellipse } = require('@jscad/modeling').primitives;
 const { subtract, union, intersect } = require('@jscad/modeling').booleans;
-const { translate, rotateX, rotateY, rotateZ, scale } = require('@jscad/modeling').transforms;
+const { translate, rotateX, rotateY, rotateZ, project, extrudeLinear } = require('@jscad/modeling').transforms;
 const { degToRad } = require('@jscad/modeling').utils;
+const { extrudeFromSlices, slice } = require('@jscad/modeling').extrusions;
 
 const getParameterDefinitions = () => {
   return [
@@ -17,55 +18,52 @@ const main = (params) => {
   const slug_od = 1.265;
   const slug_height = 2.7;
   const ball_radius = 4.25;
-  const bevel_depth = 0.2;
 
   const pitchX = Math.asin(params.forward_pitch / ball_radius);
   const pitchY = Math.asin(params.lateral_pitch / ball_radius);
   const ovalRad = degToRad(params.oval_angle);
 
-  // 1. THE SLUG (The 'Target')
+  // 1. THE SLUG
   let slug = cylinder({ height: slug_height, radius: slug_od / 2, segments: 128 });
   slug = translate([0, 0, slug_height / 2], slug);
 
-  // 2. THE CUTTER (The 'Drill')
-  // We make it massive (10 inches) so only the sidewalls touch the slug
-  let hole = cylinder({ height: 10, radius: 0.5, segments: 64 });
-  
-  // The Bevel - Sunk 0.1 into the hole for a smooth transition
-  let bevel = cylinder({ height: 1.0, radiusStart: 0.5, radiusEnd: 0.85, segments: 64 });
-  bevel = translate([0, 0, 0.4], bevel); 
+  // 2. THE HOLE (Extrusion Method)
+  // Create a 2D shape first
+  let thumb2D = ellipse({ radius: [params.thumb_width / 2, params.thumb_depth / 2], segments: 64 });
+  thumb2D = rotateZ(ovalRad, thumb2D);
+
+  // Extrude it into a 3D solid that is much longer than the slug
+  let hole = extrudeLinear({ height: 5 }, thumb2D);
+  hole = translate([0, 0, -2.5], hole); // Center it so Z=0 is the pivot point
+
+  // 3. THE BEVEL (A separate cut to ensure it doesn't tilt the top)
+  let bevel = cylinder({ height: 0.4, radiusStart: 0.5, radiusEnd: 0.8, segments: 64 });
+  bevel = translate([0, 0, -0.2], bevel);
+  bevel = rotateZ(ovalRad, bevel);
 
   let cutter = union(hole, bevel);
-  cutter = scale([params.thumb_width, params.thumb_depth, 1], cutter);
-  cutter = rotateZ(ovalRad, cutter);
   
-  // Pivot from the center of the top (Z=0 in the cutter's local space)
+  // Rotate for Pitch
   cutter = rotateX(pitchX, cutter);
   cutter = rotateY(pitchY, cutter);
   
-  // Place the pivot point at the top of the slug
+  // Place at the top
   cutter = translate([0, 0, slug_height], cutter);
 
-  // 3. THE NOTCH (Raised up slightly so it is cut AFTER the top is flattened)
+  // 4. THE NOTCH
   let notch = cuboid({ size: [0.12, 0.12, 0.4] });
   notch = translate([0, slug_od / 2, slug_height], notch);
 
-  // 4. THE MASTER FLATTENER
-  // A solid block that represents 'valid space' - anything outside is deleted
-  let worldBox = cuboid({ size: [5, 5, slug_height] });
-  worldBox = translate([0, 0, slug_height / 2], worldBox);
+  // 5. THE ULTIMATE LEVELER
+  // Instead of a box, we use a 'Intersection Plane'
+  let leveler = cylinder({ height: slug_height, radius: slug_od, segments: 128 });
+  leveler = translate([0, 0, slug_height / 2], leveler);
 
-  // 5. EXECUTION
-  // First, cut the hole out of the slug
-  let finalModel = subtract(slug, cutter);
-  
-  // Second, force the top to be flat by intersecting it with the worldBox
-  finalModel = intersect(finalModel, worldBox);
-  
-  // Finally, cut the notch (Doing it last ensures it doesn't get flattened/deleted)
-  finalModel = subtract(finalModel, notch);
+  // EXECUTION
+  let result = subtract(slug, cutter, notch);
+  result = intersect(result, leveler);
 
-  return finalModel;
+  return result;
 };
 
 module.exports = { main, getParameterDefinitions };
