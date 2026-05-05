@@ -5,7 +5,6 @@ const { degToRad } = require('@jscad/modeling').utils;
 
 const getParameterDefinitions = () => {
   return [
-    { name: 'player_name', type: 'text', initial: 'Greg', caption: 'Player Name' },
     { name: 'thumb_width', type: 'float', initial: 0.85, caption: 'Thumb Width (in)', step: 0.01 },
     { name: 'thumb_depth', type: 'float', initial: 1.05, caption: 'Thumb Depth (in)', step: 0.01 },
     { name: 'oval_angle', type: 'float', initial: 45, caption: 'Oval Angle (deg)', step: 1 },
@@ -24,36 +23,35 @@ const main = (params) => {
   const pitchY = Math.asin(params.lateral_pitch / ball_radius);
   const ovalRad = degToRad(params.oval_angle);
 
-  // 1. Create the Solid Blank
-  let blank = cylinder({ height: slug_height, radius: slug_od / 2, segments: 128 });
+  // 1. THE SLUG (Solid)
+  let blank = cylinder({ height: slug_height, radius: slug_od / 2, segments: 64 });
   blank = translate([0, 0, slug_height / 2], blank);
 
-  // 2. Build the Cutter (Hole + Bevel)
-  let hole = cylinder({ height: slug_height + 1, radius: 0.5, segments: 64 });
+  // 2. THE CUTTER (The thing that gets removed)
+  let hole = cylinder({ height: slug_height + 2, radius: 0.5, segments: 64 });
   
-  // Create a bevel at the top
-  let bevel = cylinder({ height: fillet_depth * 2, radiusStart: 0.5, radiusEnd: 0.7, segments: 64 });
-  bevel = translate([0, 0, (slug_height / 2) + (fillet_depth)], bevel);
-  
-  let combinedCutter = union(hole, bevel);
-  
-  // Apply Oval Scaling and Rotation
-  combinedCutter = scale([params.thumb_width, params.thumb_depth, 1], combinedCutter);
-  combinedCutter = rotateZ(ovalRad, combinedCutter);
+  // Create a bevel/fillet at the top
+  let bevel = cylinder({ height: fillet_depth * 2, radiusStart: 0.5, radiusEnd: 0.75, segments: 64 });
+  bevel = translate([0, 0, slug_height], bevel);
 
-  // Apply Pitch Pivot (from the top center)
-  combinedCutter = translate([0, 0, -slug_height / 2], combinedCutter);
-  combinedCutter = rotateX(pitchX, combinedCutter);
-  combinedCutter = rotateY(pitchY, combinedCutter);
-  combinedCutter = translate([0, 0, slug_height / 2], combinedCutter);
+  let fullCutter = union(hole, bevel);
+  
+  // Transform the cutter
+  fullCutter = scale([params.thumb_width, params.thumb_depth, 1], fullCutter);
+  fullCutter = rotateZ(ovalRad, fullCutter);
 
-  // 3. The Alignment Notch
+  // Pivot from the TOP center
+  fullCutter = translate([0, 0, -slug_height], fullCutter);
+  fullCutter = rotateX(pitchX, fullCutter);
+  fullCutter = rotateY(pitchY, fullCutter);
+  fullCutter = translate([0, 0, slug_height], fullCutter);
+
+  // 3. THE NOTCH
   let notch = cuboid({ size: [0.12, 0.12, 0.4] });
   notch = translate([0, slug_od / 2, slug_height], notch);
 
-  // 4. PERFORM THE SUBTRACTION
-  // This ensures we return the blank MINUS the cutters
-  return subtract(blank, combinedCutter, notch);
+  // 4. SUBTRACT (Blank minus Cutter and Notch)
+  return subtract(blank, fullCutter, notch);
 };
 
 module.exports = { main, getParameterDefinitions };
