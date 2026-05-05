@@ -1,5 +1,5 @@
 const { cylinder, cuboid } = require('@jscad/modeling').primitives;
-const { subtract, union } = require('@jscad/modeling').booleans;
+const { subtract, union, intersect } = require('@jscad/modeling').booleans;
 const { translate, rotateX, rotateY, rotateZ, scale } = require('@jscad/modeling').transforms;
 const { degToRad } = require('@jscad/modeling').utils;
 
@@ -17,45 +17,55 @@ const main = (params) => {
   const slug_od = 1.265;
   const slug_height = 2.7;
   const ball_radius = 4.25;
-  const bevel_depth = 0.15;
+  const bevel_depth = 0.2;
 
   const pitchX = Math.asin(params.forward_pitch / ball_radius);
   const pitchY = Math.asin(params.lateral_pitch / ball_radius);
   const ovalRad = degToRad(params.oval_angle);
 
-  // 1. THE SLUG (Vertical and Stationary)
+  // 1. THE SLUG (The 'Target')
   let slug = cylinder({ height: slug_height, radius: slug_od / 2, segments: 128 });
   slug = translate([0, 0, slug_height / 2], slug);
 
-  // 2. THE CUTTER (Built so the top center is [0,0,0])
-  // We make the hole 5 inches long so it clears the bottom
-  let hole = cylinder({ height: 5, radius: 0.5, segments: 64 });
-  hole = translate([0, 0, -2.5], hole); // Shift so top is at Z=0
-
-  // The Bevel (anchored to the top of the hole)
-  let bevel = cylinder({ height: 0.4, radiusStart: 0.5, radiusEnd: 0.75, segments: 64 });
-  bevel = translate([0, 0, -0.1], bevel); // Sink into the top slightly
+  // 2. THE CUTTER (The 'Drill')
+  // We make it massive (10 inches) so only the sidewalls touch the slug
+  let hole = cylinder({ height: 10, radius: 0.5, segments: 64 });
+  
+  // The Bevel - Sunk 0.1 into the hole for a smooth transition
+  let bevel = cylinder({ height: 1.0, radiusStart: 0.5, radiusEnd: 0.85, segments: 64 });
+  bevel = translate([0, 0, 0.4], bevel); 
 
   let cutter = union(hole, bevel);
-  
-  // Scale and Rotate the cutter at the origin (0,0,0)
   cutter = scale([params.thumb_width, params.thumb_depth, 1], cutter);
   cutter = rotateZ(ovalRad, cutter);
   
-  // PITCH ROTATION (Happens exactly at the top center 0,0,0)
+  // Pivot from the center of the top (Z=0 in the cutter's local space)
   cutter = rotateX(pitchX, cutter);
   cutter = rotateY(pitchY, cutter);
   
-  // MOVE CUTTER TO SLUG TOP
+  // Place the pivot point at the top of the slug
   cutter = translate([0, 0, slug_height], cutter);
 
-  // 3. THE NOTCH (Standard JoPo alignment slot)
+  // 3. THE NOTCH (Raised up slightly so it is cut AFTER the top is flattened)
   let notch = cuboid({ size: [0.12, 0.12, 0.4] });
-  notch = translate([0, slug_od / 2, slug_height - 0.1], notch);
+  notch = translate([0, slug_od / 2, slug_height], notch);
 
-  // 4. FINAL SUBTRACTION
-  // We take the slug and subtract the tilted cutter and the notch slot
-  return subtract(slug, cutter, notch);
+  // 4. THE MASTER FLATTENER
+  // A solid block that represents 'valid space' - anything outside is deleted
+  let worldBox = cuboid({ size: [5, 5, slug_height] });
+  worldBox = translate([0, 0, slug_height / 2], worldBox);
+
+  // 5. EXECUTION
+  // First, cut the hole out of the slug
+  let finalModel = subtract(slug, cutter);
+  
+  // Second, force the top to be flat by intersecting it with the worldBox
+  finalModel = intersect(finalModel, worldBox);
+  
+  // Finally, cut the notch (Doing it last ensures it doesn't get flattened/deleted)
+  finalModel = subtract(finalModel, notch);
+
+  return finalModel;
 };
 
 module.exports = { main, getParameterDefinitions };
