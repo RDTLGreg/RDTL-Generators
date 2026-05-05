@@ -1,5 +1,5 @@
 const { cylinder, cuboid } = require('@jscad/modeling').primitives;
-const { subtract, union } = require('@jscad/modeling').booleans;
+const { subtract } = require('@jscad/modeling').booleans;
 const { translate, rotateX, rotateY, rotateZ, scale } = require('@jscad/modeling').transforms;
 const { degToRad } = require('@jscad/modeling').utils;
 
@@ -23,39 +23,38 @@ const main = (params) => {
   const pitchY = Math.asin(params.lateral_pitch / ball_radius);
   const ovalRad = degToRad(params.oval_angle);
 
-  // 1. THE SLUG BLANK
-  let blank = cylinder({ height: slug_height, radius: slug_od / 2, segments: 128 });
-  blank = translate([0, 0, slug_height / 2], blank);
+  // 1. THE SOLID BLANK
+  let result = cylinder({ height: slug_height, radius: slug_od / 2, segments: 128 });
+  result = translate([0, 0, slug_height / 2], result);
 
-  // 2. THE CUTTER ASSEMBLY
-  // We make the hole 4 inches long to ensure it clears top and bottom easily
-  let hole = cylinder({ height: 4.0, radius: 0.5, segments: 64 });
-  hole = translate([0, 0, -2.0], hole); // Center it so the 'top' is at 0
-  
-  // The Bevel - Sunk into the hole slightly for a solid union
-  let bevel = cylinder({ height: 0.5, radiusStart: 0.5, radiusEnd: 0.8, segments: 64 });
-  bevel = translate([0, 0, -0.25], bevel); 
-
-  let fullCutter = union(hole, bevel);
-  
-  // Scale for Oval and Rotate for Angle
-  fullCutter = scale([params.thumb_width, params.thumb_depth, 1], fullCutter);
-  fullCutter = rotateZ(ovalRad, fullCutter);
-
-  // Apply Pitch Rotation (Pivots from the exact center of the top entry)
-  fullCutter = rotateX(pitchX, fullCutter);
-  fullCutter = rotateY(pitchY, fullCutter);
-
-  // MOVE TO FINAL POSITION
-  // We lift it to slug_height PLUS a tiny bit (0.05) to ensure it clears the top
-  fullCutter = translate([0, 0, slug_height + 0.05], fullCutter);
-
-  // 3. THE NOTCH
+  // 2. THE ALIGNMENT NOTCH
   let notch = cuboid({ size: [0.12, 0.12, 0.4] });
   notch = translate([0, slug_od / 2, slug_height], notch);
+  result = subtract(result, notch);
 
-  // 4. THE FINAL SUBTRACTION
-  return subtract(blank, fullCutter, notch);
+  // 3. THE HOLE CUTTER (Longer than slug, anchored at top)
+  let hole = cylinder({ height: slug_height + 2, radius: 0.5, segments: 64 });
+  hole = translate([0, 0, -(slug_height + 2) / 2], hole); // Anchor top at 0
+  hole = scale([params.thumb_width, params.thumb_depth, 1], hole);
+  hole = rotateZ(ovalRad, hole);
+  hole = rotateX(pitchX, hole);
+  hole = rotateY(pitchY, hole);
+  hole = translate([0, 0, slug_height + 0.1], hole); // Lift into slug + overshoot top
+
+  result = subtract(result, hole);
+
+  // 4. THE BEVEL CUTTER (Small cone at top)
+  let bevel = cylinder({ height: 0.4, radiusStart: 0.5, radiusEnd: 0.8, segments: 64 });
+  bevel = translate([0, 0, -0.2], bevel); // Anchor top near 0
+  bevel = scale([params.thumb_width, params.thumb_depth, 1], bevel);
+  bevel = rotateZ(ovalRad, bevel);
+  bevel = rotateX(pitchX, bevel);
+  bevel = rotateY(pitchY, bevel);
+  bevel = translate([0, 0, slug_height + 0.1], bevel); // Lift into slug + overshoot top
+
+  result = subtract(result, bevel);
+
+  return result;
 };
 
 module.exports = { main, getParameterDefinitions };
