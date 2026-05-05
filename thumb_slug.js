@@ -19,43 +19,43 @@ const main = (params) => {
   const ball_radius = 4.25;
   const fillet_depth = 0.15;
 
-  // Pitch Angles
   const pitchX = Math.asin(params.forward_pitch / ball_radius);
   const pitchY = Math.asin(params.lateral_pitch / ball_radius);
   const ovalRad = degToRad(params.oval_angle);
 
-  // 1. THE SLUG BLANK (Centered at Z=0 for easier math)
+  // 1. THE SLUG BLANK
   let blank = cylinder({ height: slug_height, radius: slug_od / 2, segments: 128 });
   blank = translate([0, 0, slug_height / 2], blank);
 
-  // 2. THE CUTTER ASSEMBLY
-  // Create a hole that starts at Z=0 and goes DOWN
-  let hole = cylinder({ height: slug_height + 1, radius: 0.5, segments: 64 });
-  hole = translate([0, 0, -(slug_height + 1) / 2], hole);
+  // 2. THE CUTTER ASSEMBLY (Built from the top down)
+  // The main hole - made extra long to clear the bottom
+  let hole = cylinder({ height: slug_height + 2, radius: 0.5, segments: 64 });
+  // Offset so the top of the cylinder is at Z=0
+  hole = translate([0, 0, -(slug_height + 2) / 2], hole);
   
-  // Create the bevel at the very top (Z=0)
+  // The Bevel - Offset so it sinks into the top of the hole
   let bevel = cylinder({ height: fillet_depth * 2, radiusStart: 0.5, radiusEnd: 0.7, segments: 64 });
-  bevel = translate([0, 0, -fillet_depth], bevel);
+  bevel = translate([0, 0, -fillet_depth + 0.01], bevel); // +0.01 creates a solid overlap
 
-  // Combine them into one "drill bit"
+  // Combine into one solid 'bit'
   let fullCutter = union(hole, bevel);
   
-  // Apply Oval Scaling and Rotation
+  // Scale for Oval and Rotate for Angle
   fullCutter = scale([params.thumb_width, params.thumb_depth, 1], fullCutter);
   fullCutter = rotateZ(ovalRad, fullCutter);
 
-  // PITCH PIVOT: Rotate the cutter from its top center (0,0,0)
+  // Apply Pitch Rotation (Pivots from 0,0,0)
   fullCutter = rotateX(pitchX, fullCutter);
   fullCutter = rotateY(pitchY, fullCutter);
 
-  // MOVE TO FINAL POSITION: Lift the cutter so its top is at the top of the slug
+  // Move the cutter to the top of the slug
   fullCutter = translate([0, 0, slug_height], fullCutter);
 
   // 3. THE NOTCH
   let notch = cuboid({ size: [0.12, 0.12, 0.4] });
   notch = translate([0, slug_od / 2, slug_height], notch);
 
-  // 4. THE SUBTRACTION
+  // 4. THE FINAL CUT
   return subtract(blank, fullCutter, notch);
 };
 
