@@ -23,38 +23,40 @@ const main = (params) => {
   const pitchY = Math.asin(params.lateral_pitch / ball_radius);
   const ovalRad = degToRad(params.oval_angle);
 
-  // 1. THE SLUG (Solid Blank)
+  // 1. THE SLUG
   let slug = cylinder({ height: slug_height, radius: slug_od / 2, segments: 128 });
   slug = translate([0, 0, slug_height / 2], slug);
 
-  // 2. THE CUTTER ASSEMBLY
-  let hole = cylinder({ height: 5, radius: 0.5, segments: 64 });
-  hole = translate([0, 0, -2.5], hole); // Anchor top at 0
-
-  let bevel = cylinder({ height: bevel_depth * 2, radiusStart: 0.5, radiusEnd: 0.8, segments: 64 });
-  bevel = translate([0, 0, -bevel_depth + 0.02], bevel); // Slight overlap
+  // 2. THE CUTTER (Extra-long cylinder so the 'slanted top' is 2 inches above the slug)
+  let hole = cylinder({ height: 8, radius: 0.5, segments: 64 });
+  
+  // The Bevel - we make this a very tall cone so the tilt doesn't leave a lip
+  let bevel = cylinder({ height: 1.0, radiusStart: 0.5, radiusEnd: 0.9, segments: 64 });
+  bevel = translate([0, 0, 0.4], bevel); // Lift it so the transition is at Z=0
 
   let cutter = union(hole, bevel);
   cutter = scale([params.thumb_width, params.thumb_depth, 1], cutter);
   cutter = rotateZ(ovalRad, cutter);
   
-  // Pivot exactly from the top entry point
+  // Pivot from Z=0 (the entry point)
   cutter = rotateX(pitchX, cutter);
   cutter = rotateY(pitchY, cutter);
+  
+  // Move it so the pivot point sits exactly at the slug's top surface
   cutter = translate([0, 0, slug_height], cutter);
 
-  // 3. THE TOP FLATTENER (Ensures the top is perfectly flat)
-  // This is a big block that sits just above the slug
-  let flattener = cuboid({ size: [3, 3, 1] });
-  flattener = translate([0, 0, slug_height + 0.5], flattener);
+  // 3. THE FLATTENER (A massive block to shave the top 100% flat)
+  let flattener = cuboid({ size: [10, 10, 4] });
+  flattener = translate([0, 0, slug_height + 2.0], flattener);
 
   // 4. THE NOTCH
   let notch = cuboid({ size: [0.12, 0.12, 0.4] });
   notch = translate([0, slug_od / 2, slug_height], notch);
 
-  // 5. FINAL BOOLEAN
-  // We subtract the cutters AND the flattener to keep the top clean
-  return subtract(slug, cutter, notch, flattener);
+  // 5. FINAL ASSEMBLY
+  let finalModel = subtract(slug, cutter, notch, flattener);
+
+  return finalModel;
 };
 
 module.exports = { main, getParameterDefinitions };
