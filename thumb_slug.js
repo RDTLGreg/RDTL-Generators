@@ -17,43 +17,44 @@ const main = (params) => {
   const slug_od = 1.265;
   const slug_height = 2.7;
   const ball_radius = 4.25;
-  const fillet_depth = 0.2; // Increased slightly for visibility
+  const bevel_depth = 0.2;
 
+  // Pitch Angles
   const pitchX = Math.asin(params.forward_pitch / ball_radius);
   const pitchY = Math.asin(params.lateral_pitch / ball_radius);
   const ovalRad = degToRad(params.oval_angle);
 
-  // 1. THE SLUG
+  // 1. THE SLUG (Solid Blank)
   let blank = cylinder({ height: slug_height, radius: slug_od / 2, segments: 128 });
   blank = translate([0, 0, slug_height / 2], blank);
 
-  // 2. THE HOLE (Extra long to prevent angled top artifacts)
-  let hole = cylinder({ height: 6, radius: 0.5, segments: 64 });
-  // Position so the center of the pivot is at the top of the hole section
-  hole = translate([0, 0, -3], hole); 
+  // 2. THE CUTTER ASSEMBLY (Building the 'drill bit' from Z=0 downwards)
+  
+  // The Main Hole (Diameter 1 so scaling works perfectly)
+  let hole = cylinder({ height: 4, radius: 0.5, segments: 64 });
+  hole = translate([0, 0, -2], hole); // Moves top of cylinder to 0
 
-  // 3. THE BEVEL (A cone that sits at the top)
-  let bevel = cylinder({ height: 0.6, radiusStart: 0.5, radiusEnd: 0.8, segments: 64 });
-  bevel = translate([0, 0, -0.2], bevel); // Sunk in so it creates a nice flare
+  // The Bevel (A flare at the top)
+  let bevel = cylinder({ height: bevel_depth * 2, radiusStart: 0.5, radiusEnd: 0.75, segments: 64 });
+  bevel = translate([0, 0, -bevel_depth + 0.05], bevel); // Overlap slightly with hole
 
-  // Combine and Transform
+  // Group and Transform the 'drill bit'
   let cutters = union(hole, bevel);
   cutters = scale([params.thumb_width, params.thumb_depth, 1], cutters);
   cutters = rotateZ(ovalRad, cutters);
   
-  // Pivot for Pitch
+  // APPLY PITCH (Pivot point is now naturally [0,0,0] - the center of the top entry)
   cutters = rotateX(pitchX, cutters);
   cutters = rotateY(pitchY, cutters);
   
-  // Move to the top of the slug
-  // We lift it exactly to slug_height. Because the cutters are so tall, 
-  // they will "punch through" the top perfectly flat.
+  // PLACE AT TOP OF SLUG
   cutters = translate([0, 0, slug_height], cutters);
 
-  // 4. THE NOTCH
+  // 3. THE NOTCH
   let notch = cuboid({ size: [0.12, 0.12, 0.4] });
   notch = translate([0, slug_od / 2, slug_height], notch);
 
+  // 4. FINAL CUT
   return subtract(blank, cutters, notch);
 };
 
